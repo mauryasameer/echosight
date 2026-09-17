@@ -1,0 +1,10 @@
+services:
+  echosight:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./src/data:/home/app/echosight/src/data
+      - ./checkpoints:/home/app/echosight/checkpoints
+      - ./reports:/home/app/echosight/reports

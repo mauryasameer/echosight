@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "echosight"
+version = "0.1.0"
+description = "Image captioning (InceptionV3 + Bahdanau attention + GRU) with GenAI description enrichment and text-to-speech, built on meerax."
+readme = "README.md"
+requires-python = ">=3.12"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "PIE", "PLC"]
+ignore = ["E501", "B008", "UP007", "PIE790"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*" = ["PLC0415", "T201"]
+"tests/*" = ["S101", "PLC0415"]
+"conftest.py" = ["PLC0415"]
+"src/app.py" = ["PLC0415"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
