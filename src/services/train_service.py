@@ -41,16 +41,30 @@ class CaptionTrainer:
         self.checkpoint_manager = tf.train.CheckpointManager(
             self.checkpoint, str(self.checkpoint_dir), max_to_keep=5
         )
+        self._warm_build()
         self._restore_latest()
+
+    def _warm_build(self) -> None:
+        """Build encoder/decoder/optimizer variables via a dummy train step before restore --
+        Keras layers build lazily on first call, and TF's deferred-restore for
+        not-yet-built subclassed-model variables does not reliably reconnect them
+        under the installed TF 2.21/Keras 3.15 (verified: encoder.fc and
+        attention.W1/W2 silently kept random-init values otherwise, with zero error,
+        and then never received gradients on any subsequent training step). Adam's
+        per-variable momentum/velocity slots are equally lazy -- they are created on
+        the optimizer's first apply_gradients call, not on model build -- so a plain
+        forward pass alone is not enough to make status.assert_consumed() succeed in
+        _restore_latest(); running one full dummy train_step here builds all three
+        (encoder, decoder, optimizer slots) before restore is attempted."""
+        dummy_img = tf.zeros((1, 64, 2048))
+        dummy_target = tf.ones((1, 2), dtype=tf.int32)
+        self.train_step(dummy_img, dummy_target, start_token_id=1)
 
     def _restore_latest(self) -> None:
         if self.checkpoint_manager.latest_checkpoint:
-            try:
-                self.checkpoint.restore(self.checkpoint_manager.latest_checkpoint)
-                logger.info("Resumed from checkpoint at epoch %d", int(self.checkpoint.epoch))
-            except Exception:
-                self.checkpoint.epoch.assign(0)
-                logger.warning("Checkpoint restore failed, starting fresh", exc_info=True)
+            status = self.checkpoint.restore(self.checkpoint_manager.latest_checkpoint)
+            status.assert_consumed()
+            logger.info("Resumed from checkpoint at epoch %d", int(self.checkpoint.epoch))
         else:
             logger.info("No checkpoint found, starting fresh")
 

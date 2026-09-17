@@ -55,3 +55,36 @@ def test_on_epoch_end_callback_invoked(tmp_path):
         on_epoch_end=lambda epoch, loss: seen.append((epoch, loss)),
     )
     assert seen == [(1, seen[0][1])]
+
+
+def test_resume_restores_encoder_and_attention_weights_and_keeps_training(tmp_path):
+    """Regression test for the deferred-restore bug: encoder/attention variables are
+    only built lazily on first call(), so restoring a checkpoint before ever calling
+    encoder/decoder used to silently leave encoder.fc and attention.W1/W2 at their
+    random-init values (no error raised) and then those variables never received
+    gradients again. _warm_build() must run before _restore_latest() so the restore
+    actually reconnects every variable."""
+    trainer1 = CaptionTrainer(embedding_dim=32, units=64, vocab_size=50, checkpoint_dir=str(tmp_path))
+    dataset = list(_tiny_dataset(vocab_size=50, n_batches=2))
+    trainer1.fit(dataset, epochs=1, start_token_id=1, checkpoint_interval=1)
+
+    encoder_fc_kernel_ref = trainer1.encoder.fc.kernel.numpy().copy()
+    attention_w1_kernel_ref = trainer1.decoder.attention.W1.kernel.numpy().copy()
+
+    trainer2 = CaptionTrainer(embedding_dim=32, units=64, vocab_size=50, checkpoint_dir=str(tmp_path))
+
+    encoder_fc_match = np.allclose(trainer2.encoder.fc.kernel.numpy(), encoder_fc_kernel_ref)
+    attention_w1_match = np.allclose(trainer2.decoder.attention.W1.kernel.numpy(), attention_w1_kernel_ref)
+    assert encoder_fc_match, "encoder.fc.kernel was not restored (came back as random-init)"
+    assert attention_w1_match, "attention.W1.kernel was not restored (came back as random-init)"
+
+    img, target = next(_tiny_dataset(vocab_size=50))
+    hidden = trainer2.decoder.reset_state(batch_size=target.shape[0])
+    dec_input = tf.expand_dims([1] * target.shape[0], 1)
+    with tf.GradientTape() as tape:
+        features = trainer2.encoder(img)
+        predictions, hidden, _ = trainer2.decoder(dec_input, features, hidden)
+        loss = tf.reduce_mean(predictions)
+    gradients = tape.gradient(loss, trainer2.encoder.trainable_variables)
+    assert all(g is not None for g in gradients), "encoder is silently frozen after resume"
+    assert any(float(tf.norm(g)) > 0.0 for g in gradients), "encoder gradients are all zero after resume"
