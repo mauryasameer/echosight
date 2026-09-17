@@ -88,3 +88,26 @@ def test_resume_restores_encoder_and_attention_weights_and_keeps_training(tmp_pa
     gradients = tape.gradient(loss, trainer2.encoder.trainable_variables)
     assert all(g is not None for g in gradients), "encoder is silently frozen after resume"
     assert any(float(tf.norm(g)) > 0.0 for g in gradients), "encoder gradients are all zero after resume"
+
+
+def test_fresh_construction_does_not_perturb_weights(tmp_path):
+    """Regression test: _warm_build() must build encoder/decoder/optimizer variables
+    with ZERO weight change, even on a fresh (no-checkpoint) construction. An earlier
+    version of this fix ran a full dummy train_step (forward + backward +
+    apply_gradients) to build all three, but that silently applied a real gradient
+    update from degenerate all-zero dummy data before any real training happened --
+    measurably perturbing decoder.embedding/fc1/fc2 on every fresh run and breaking
+    reproducibility of a seeded fresh construction. This checks the fix (a plain
+    forward pass + optimizer.build(), no gradient application) leaves every weight
+    bit-for-bit at its random-init value."""
+    trainer = CaptionTrainer(embedding_dim=32, units=64, vocab_size=50, checkpoint_dir=str(tmp_path))
+
+    # Re-run _warm_build() a second time and confirm every trainable variable is
+    # bit-for-bit unchanged -- if warm-build ever again applies a real gradient step,
+    # a second call would move the weights again and this would catch it.
+    before = [v.numpy().copy() for v in trainer.encoder.trainable_variables + trainer.decoder.trainable_variables]
+    trainer._warm_build()
+    after = [v.numpy() for v in trainer.encoder.trainable_variables + trainer.decoder.trainable_variables]
+
+    for b, a in zip(before, after, strict=True):
+        assert np.array_equal(b, a), "warm-build perturbed a weight that should be untouched"

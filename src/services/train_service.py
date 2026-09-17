@@ -45,20 +45,30 @@ class CaptionTrainer:
         self._restore_latest()
 
     def _warm_build(self) -> None:
-        """Build encoder/decoder/optimizer variables via a dummy train step before restore --
-        Keras layers build lazily on first call, and TF's deferred-restore for
-        not-yet-built subclassed-model variables does not reliably reconnect them
+        """Build encoder/decoder/optimizer variables before restore, with zero weight
+        perturbation -- Keras layers build lazily on first call, and TF's deferred-restore
+        for not-yet-built subclassed-model variables does not reliably reconnect them
         under the installed TF 2.21/Keras 3.15 (verified: encoder.fc and
         attention.W1/W2 silently kept random-init values otherwise, with zero error,
         and then never received gradients on any subsequent training step). Adam's
         per-variable momentum/velocity slots are equally lazy -- they are created on
-        the optimizer's first apply_gradients call, not on model build -- so a plain
-        forward pass alone is not enough to make status.assert_consumed() succeed in
-        _restore_latest(); running one full dummy train_step here builds all three
-        (encoder, decoder, optimizer slots) before restore is attempted."""
+        the optimizer's first apply_gradients call, not on model build. An earlier version
+        of this fix ran a full dummy train_step (forward + backward + apply_gradients) to
+        build all three, but that applies a real gradient update from degenerate all-zero
+        dummy data before any real training happens -- verified this measurably perturbs
+        decoder.embedding/fc1/fc2 on every fresh (no-checkpoint) construction, breaking
+        reproducibility of a seeded fresh run. A plain forward pass (encoder + decoder
+        __call__, no tape) builds the model's own variables with no gradient step at all;
+        optimizer.build(trainable_variables) separately creates the optimizer's slot
+        variables with no gradient application either -- verified this produces the same
+        assert_consumed()-satisfying variable set with exactly zero weight perturbation."""
         dummy_img = tf.zeros((1, 64, 2048))
-        dummy_target = tf.ones((1, 2), dtype=tf.int32)
-        self.train_step(dummy_img, dummy_target, start_token_id=1)
+        hidden = self.decoder.reset_state(batch_size=1)
+        dummy_token = tf.zeros((1, 1), dtype=tf.int32)
+        features = self.encoder(dummy_img)
+        self.decoder(dummy_token, features, hidden)
+        trainable_variables = self.encoder.trainable_variables + self.decoder.trainable_variables
+        self.optimizer.build(trainable_variables)
 
     def _restore_latest(self) -> None:
         if self.checkpoint_manager.latest_checkpoint:
