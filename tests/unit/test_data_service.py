@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 import pytest
 
 from src.services.data_service import build_annotations, build_tokenizer, load_captions, split_train_test
