@@ -62,22 +62,28 @@ def _run_train(args: argparse.Namespace) -> int:
         embedding_dim=256, units=512, vocab_size=args.top_k + 1, checkpoint_dir=args.checkpoint_dir
     )
 
-    def batched_dataset():
-        batch_imgs, batch_caps = [], []
-        for path, cap in zip(split.img_train, split.cap_train, strict=True):
-            if path not in feature_cache:
-                continue
-            batch_imgs.append(feature_cache[path])
-            batch_caps.append(cap)
-            if len(batch_imgs) == args.batch_size:
+    class _BatchedDataset:
+        """Re-iterable wrapper: `trainer.fit()` iterates `dataset` once per epoch, so a
+        plain generator (single-use, exhausted after the first epoch) silently yields zero
+        batches on every subsequent epoch. `__iter__` returning a fresh generator each call
+        makes this a genuine `Iterable`, matching `CaptionTrainer.fit()`'s own type hint."""
+
+        def __iter__(self):
+            batch_imgs, batch_caps = [], []
+            for path, cap in zip(split.img_train, split.cap_train, strict=True):
+                if path not in feature_cache:
+                    continue
+                batch_imgs.append(feature_cache[path])
+                batch_caps.append(cap)
+                if len(batch_imgs) == args.batch_size:
+                    yield tf.convert_to_tensor(batch_imgs), tf.convert_to_tensor(batch_caps)
+                    batch_imgs, batch_caps = [], []
+            if batch_imgs:
                 yield tf.convert_to_tensor(batch_imgs), tf.convert_to_tensor(batch_caps)
-                batch_imgs, batch_caps = [], []
-        if batch_imgs:
-            yield tf.convert_to_tensor(batch_imgs), tf.convert_to_tensor(batch_caps)
 
     epoch_losses: list[tuple[int, float]] = []
     trainer.fit(
-        batched_dataset(),
+        _BatchedDataset(),
         epochs=args.epochs,
         start_token_id=tokenizer.word_index["<start>"],
         checkpoint_interval=args.checkpoint_interval,
