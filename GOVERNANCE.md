@@ -9,11 +9,17 @@ instead of a cane, guide dog, or human assistance for any safety-relevant decisi
 
 ## Explainability Boundary
 
-The attention map shows which of the image's 64 spatial regions the model weighted most
-when generating each word of its caption — directly inspectable, not a black box. The
-LLM-enriched description is explicitly labeled as elaboration on the model's own caption,
-not an independently verified description of the image's actual contents; the LLM never
-sees the image itself, only the caption text.
+`greedy_caption` computes an attention map showing which of the image's 64 spatial
+regions the model weighted most when generating each word — but as of v0.1.1 this is
+**not currently rendered in the HTML report** (`src/app.py` does not pass it through to
+`build_report`), and `beam_caption` — the CLI's default decoding mode — only ever
+returns a placeholder, not real attention weights. Wiring a real attention
+visualization into the report is tracked as a v0.2.0 follow-up; until then, the
+captioning model should be treated as not currently offering inspectable attention to
+the end user, despite computing it internally. The LLM-enriched description is
+explicitly labeled as elaboration on the model's own caption, not an independently
+verified description of the image's actual contents; the LLM never sees the image
+itself, only the caption text.
 
 ## Fairness
 
@@ -21,6 +27,13 @@ Flickr8k's known demographic and scene-type skew (predominantly Western/English-
 photographs) is a documented limitation of any model trained on it, not a solved problem.
 Caption accuracy and the enrichment layer's assumptions may be less reliable on images
 outside that distribution — this is stated here rather than left unaddressed.
+
+Separately, the v0.1.0 training run's train/test split was not grouped by image (each
+Flickr8k image has 5 caption rows, and the split operates on rows), so its reported
+evaluation numbers reflect train-set-contaminated performance, not measured held-out
+generalization — see CHANGELOG.md's `[0.1.1]` correction. This does not affect the
+model's ability to produce coherent captions, which was verified independently, but no
+claim of measured accuracy on unseen images should be inferred from v0.1.0's numbers.
 
 ## LLM Controls
 
