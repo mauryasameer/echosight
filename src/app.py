@@ -119,8 +119,16 @@ def _run_caption(args: argparse.Namespace) -> int:
 
     raw_caption = " ".join(t for t in result.tokens if t not in ("<start>", "<end>", "<pad>"))
 
-    llm = LLM_PROVIDERS[args.llm_provider]()
-    enriched = enrich_caption(raw_caption, llm)
+    try:
+        llm = LLM_PROVIDERS[args.llm_provider]()
+        enriched = enrich_caption(raw_caption, llm)
+    except Exception:
+        # enrich_caption() already isolates generate()-call failures; provider
+        # *construction* (e.g. a missing API key env var) happens outside that
+        # boundary and was crashing the whole CLI instead of falling back to the
+        # raw caption like every other enrichment failure does.
+        logger.exception("LLM provider unavailable, falling back to raw caption")
+        enriched = raw_caption
     audio_b64 = text_to_speech_b64(enriched)
 
     eval_result = None
