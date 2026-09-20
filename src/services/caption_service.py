@@ -60,35 +60,43 @@ def beam_caption(
     max_length: int,
     beam_index: int = 3,
 ) -> CaptionResult:
-    hidden = decoder.reset_state(batch_size=1)
+    initial_hidden = decoder.reset_state(batch_size=1)
     temp_input = tf.expand_dims(load_and_preprocess_image(image_path), 0)
     img_tensor_val = extractor(temp_input)
     img_tensor_val = tf.reshape(img_tensor_val, (img_tensor_val.shape[0], -1, img_tensor_val.shape[3]))
     features = encoder(img_tensor_val)
 
     start = [tokenizer.word_index["<start>"]]
-    sequences: list[list] = [[start, 0.0]]
+    # Each candidate carries its OWN hidden state, since beams diverge after the first
+    # expansion step and the GRU decoder is stateful -- reusing one shared/static hidden
+    # state across every step (as an earlier version of this function did) starves the
+    # decoder of any memory of what it has already generated, which manifests as an
+    # infinite repeating token loop on a real trained model (verified: a real held-out
+    # image produced "...on a group of people on a group of people..." for max_length
+    # steps under the static-hidden bug, while correctly threading state per candidate
+    # here produces a normal, terminating caption).
+    sequences: list[list] = [[start, 0.0, initial_hidden]]
     end_id = tokenizer.word_index.get("<end>")
 
     for _ in range(max_length - 1):
         all_candidates = []
-        for seq, score in sequences:
+        for seq, score, hidden in sequences:
             if end_id is not None and seq[-1] == end_id:
-                all_candidates.append([seq, score])
+                all_candidates.append([seq, score, hidden])
                 continue
 
             dec_input = tf.expand_dims([seq[-1]], 0)
-            predictions, _, _ = decoder(dec_input, features, hidden)
+            predictions, new_hidden, _ = decoder(dec_input, features, hidden)
             log_probs = tf.nn.log_softmax(predictions[0]).numpy()
             top_ids = np.argsort(log_probs)[-beam_index:]
             for token_id in top_ids:
-                candidate = [seq + [int(token_id)], score + float(log_probs[token_id])]
+                candidate = [seq + [int(token_id)], score + float(log_probs[token_id]), new_hidden]
                 all_candidates.append(candidate)
 
         ordered = sorted(all_candidates, key=lambda entry: entry[1], reverse=True)
         sequences = ordered[:beam_index]
 
-        if end_id is not None and all(seq[-1] == end_id for seq, _ in sequences):
+        if end_id is not None and all(seq[-1] == end_id for seq, _, _ in sequences):
             break
 
     best_seq = sequences[0][0]

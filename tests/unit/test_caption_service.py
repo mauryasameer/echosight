@@ -76,6 +76,46 @@ def test_beam_caption_terminates_when_all_sequences_end_immediately(monkeypatch)
     assert result.attention_plot.shape[1] == 64
 
 
+def test_beam_caption_threads_hidden_state_between_steps(monkeypatch):
+    """Regression test for a real bug found during Task 13's real training run: an
+    earlier version of beam_caption discarded the hidden state returned by each decoder
+    call (`predictions, _, _ = decoder(...)`) and reused the same static initial hidden
+    state for every step of every candidate. Because the GRU decoder is stateful, this
+    starved it of any memory of what had already been generated -- on a real trained
+    model this manifested as an infinite repeating-token loop that never reached <end>
+    within max_length. This test mocks a decoder whose prediction depends on the hidden
+    state's value (a simple step counter carried in hidden[0, 0]): correctly threading
+    hidden state forward makes the counter advance and the sequence reach <end> well
+    before max_length; the old, broken static-hidden implementation would leave the
+    counter frozen at 0 forever, so `beam_caption` would run the full bounded loop
+    without ever terminating early -- exactly the shape of the real bug."""
+    embedding_dim, units, vocab_size = 8, 16, 5
+    encoder = CNN_Encoder(embedding_dim)
+    decoder = RNN_Decoder(embedding_dim, units, vocab_size)
+    tokenizer = _FakeTokenizer()
+    end_id = tokenizer.word_index["<end>"]
+    loop_token_id = tokenizer.word_index["dog"]
+
+    def fake_decoder_call(x, features, hidden):
+        batch = x.shape[0]
+        step = float(hidden[0, 0].numpy())
+        next_id = end_id if step >= 3 else loop_token_id
+        logits = tf.one_hot([next_id] * batch, depth=vocab_size) * 100.0
+        new_hidden = hidden + 1.0
+        return logits, new_hidden, tf.ones((batch, 64, 1)) / 64.0
+
+    monkeypatch.setattr(decoder, "call", fake_decoder_call)
+    monkeypatch.setattr(
+        "src.services.caption_service.load_and_preprocess_image", lambda path: tf.zeros((299, 299, 3))
+    )
+    fake_extractor = MagicMock(return_value=tf.random.normal((1, 8, 8, 2048)))
+
+    result = beam_caption(
+        "/fake/img.jpg", encoder, decoder, fake_extractor, tokenizer, max_length=30, beam_index=1
+    )
+    assert result.tokens == ["dog", "dog", "dog", "<end>"]
+
+
 def test_beam_caption_returns_result_for_normal_max_length(monkeypatch):
     """A more realistic beam search (random, untrained weights -- never all hit <end>
     on step one) still terminates and returns a well-formed CaptionResult within the
