@@ -12,7 +12,7 @@ instead of a cane, guide dog, or human assistance for any safety-relevant decisi
 `greedy_caption` computes an attention map showing which of the image's 64 spatial
 regions the model weighted most when generating each word — but as of v0.1.1 this is
 **not currently rendered in the HTML report** (`src/app.py` does not pass it through to
-`build_report`), and `beam_caption` — the CLI's default decoding mode — only ever
+`build_report`), and `beam_caption` — available via the `--beam` flag — only ever
 returns a placeholder, not real attention weights. Wiring a real attention
 visualization into the report is tracked as a v0.2.0 follow-up; until then, the
 captioning model should be treated as not currently offering inspectable attention to

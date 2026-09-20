@@ -22,7 +22,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `GOVERNANCE.md`'s Explainability section claimed attention maps are "directly
   inspectable" in every report. They are computed by `greedy_caption` but never
   rendered (`attention_fig` is hardcoded to `None` in `src/app.py`, and
-  `beam_caption` — the CLI's default — only ever returns a zero-filled
+  `beam_caption` — available via `--beam` — only ever returns a zero-filled
   placeholder, not real attention weights). Corrected to accurately describe the
   current state; wiring a real attention visualization through is tracked for
   `v0.2.0`.
@@ -87,7 +87,8 @@ the training split" claims originally written here were wrong.** `split_train_te
 splits caption *rows*, not images; since each image has 5 caption rows, this
 leaks nearly every image into both splits. Only 1 of the dataset's 8,091 images
 is genuinely unseen by training — the model was effectively trained on 8,090 of
-them (99.99%). The BLEU/ROUGE numbers originally reported below are therefore
+them (99.99%). The BLEU-4/ROUGE-L numbers originally reported here (BLEU-4 = 0.0162,
+ROUGE-L = 0.1053, since removed) were therefore
 train-set-contaminated, not held-out generalization scores. `beam_caption` and
 `greedy_caption` do produce coherent, non-repeating, non-collapsed captions (that
 part holds up — verified independently on multiple images including the one
