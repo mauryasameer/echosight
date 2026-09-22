@@ -52,7 +52,18 @@ class TrainTestSplit:
 
 
 def split_train_test(df: pd.DataFrame, cap_vector: np.ndarray, test_size: float = 0.2) -> TrainTestSplit:
-    img_train, img_test, cap_train, cap_test = train_test_split(
-        list(df["Path"]), cap_vector, test_size=test_size, random_state=42
-    )
+    """Splits by IMAGE, not by caption row. `df` has one row per caption (5 per image
+    in Flickr8k); splitting rows directly (as an earlier version of this function did)
+    lets the same image's captions land on both sides of the split, leaking nearly
+    every image into both train and test. Grouping by `df["ID"]` first keeps all of an
+    image's captions together on one side."""
+    unique_ids = np.array(sorted(df["ID"].unique().tolist()), dtype=object)
+    train_ids, test_ids = train_test_split(unique_ids, test_size=test_size, random_state=42)
+    train_mask = df["ID"].isin(set(train_ids)).to_numpy()
+    test_mask = df["ID"].isin(set(test_ids)).to_numpy()
+
+    img_train = list(df.loc[train_mask, "Path"])
+    img_test = list(df.loc[test_mask, "Path"])
+    cap_train = cap_vector[train_mask]
+    cap_test = cap_vector[test_mask]
     return TrainTestSplit(img_train=img_train, img_test=img_test, cap_train=cap_train, cap_test=cap_test)
