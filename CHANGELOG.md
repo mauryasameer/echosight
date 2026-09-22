@@ -3,6 +3,11 @@
 All notable changes to this project will be documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.1.2] - 2026-09-22
+
+### Changed
+- Added a repository hero that illustrates EchoSight's image-to-caption-to-audio assistive workflow.
+
 ## [0.1.1] - 2026-09-20
 
 ### Fixed
