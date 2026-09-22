@@ -111,6 +111,15 @@ def _run_caption(args: argparse.Namespace) -> int:
     trainer_shell = CaptionTrainer(
         embedding_dim=256, units=512, vocab_size=args.top_k + 1, checkpoint_dir=args.checkpoint_dir
     )
+    if trainer_shell.checkpoint_manager.latest_checkpoint is None:
+        # A tokenizer.pkl existing (checked above) doesn't guarantee a checkpoint does --
+        # without this check, captioning silently ran on random-init weights, producing
+        # a confident-looking but meaningless report with real (garbage) audio and exit 0.
+        print(
+            f"error: no trained checkpoint found in {args.checkpoint_dir}; run --mode train first",
+            file=sys.stderr,
+        )
+        return 1
     encoder, decoder = trainer_shell.encoder, trainer_shell.decoder
 
     extractor = build_feature_extractor()
