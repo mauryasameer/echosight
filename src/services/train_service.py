@@ -84,7 +84,7 @@ class CaptionTrainer:
         dec_input = tf.expand_dims([start_token_id] * target.shape[0], 1)
 
         with tf.GradientTape() as tape:
-            features = self.encoder(img_tensor)
+            features = self.encoder(img_tensor, training=True)
             for i in range(1, target.shape[1]):
                 predictions, hidden, _ = self.decoder(dec_input, features, hidden)
                 loss += _masked_loss(target[:, i], predictions)
