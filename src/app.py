@@ -8,7 +8,7 @@ from meerax.llm.claude import ClaudeProvider
 from meerax.llm.ollama import OllamaProvider
 from meerax.llm.openai_provider import OpenAIProvider
 
-from src.services.caption_service import beam_caption, greedy_caption
+from src.services.caption_service import beam_caption, build_attention_figure, greedy_caption
 from src.services.data_service import (
     build_annotations,
     build_tokenizer,
@@ -144,13 +144,21 @@ def _run_caption(args: argparse.Namespace) -> int:
     if args.eval and args.reference_caption:
         eval_result = evaluate_captions([args.reference_caption], [raw_caption])
 
+    # beam_caption only ever returns a zero-filled placeholder attention_plot (it
+    # doesn't track per-step attention the way greedy_caption's simpler single-path
+    # decode does), so only build a real attention figure for greedy captions --
+    # rendering beam's placeholder would show a meaningless map as if it were real.
+    attention_fig = None
+    if not args.beam and result.tokens:
+        attention_fig = build_attention_figure(args.image, result.tokens, result.attention_plot)
+
     report = build_report(
         title="EchoSight — Image Description",
         image_path=args.image,
         raw_caption=raw_caption,
         enriched_description=enriched,
         audio_b64=audio_b64,
-        attention_fig=None,
+        attention_fig=attention_fig,
         eval_result=eval_result,
         epochs_trained=int(trainer_shell.checkpoint.epoch),
     )
