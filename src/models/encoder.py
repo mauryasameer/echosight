@@ -13,7 +13,8 @@ class CNN_Encoder(keras.Model):
         self.fc = layers.Dense(embedding_dim)
         self.dropout = layers.Dropout(0.5)
 
-    def call(self, x: tf.Tensor) -> tf.Tensor:
+    def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         x = self.fc(x)
         x = tf.nn.relu(x)
+        x = self.dropout(x, training=training)
         return x

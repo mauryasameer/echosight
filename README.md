@@ -2,7 +2,7 @@
 
 ![EchoSight image-captioning to spoken-audio workflow](docs/assets/echosight-hero.png)
 
-[![Version](https://img.shields.io/badge/version-0.1.2-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue)](CHANGELOG.md)
 [![CI](https://github.com/mauryasameer/echosight/actions/workflows/ci.yml/badge.svg)](https://github.com/mauryasameer/echosight/actions)
 [![Python](https://img.shields.io/badge/python-3.12-3776AB)](https://www.python.org)
 [![License](https://img.shields.io/badge/license-MIT-informational)](LICENSE)
