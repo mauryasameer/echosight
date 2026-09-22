@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
 import tensorflow as tf
+from matplotlib.figure import Figure
+from PIL import Image
 from tensorflow import keras
 
 from src.models.decoder import RNN_Decoder
@@ -104,3 +107,32 @@ def beam_caption(
 
     attention_plot = np.zeros((max(len(result), 1), 64))
     return CaptionResult(tokens=result, attention_plot=attention_plot[: len(result)])
+
+
+def build_attention_figure(image_path: str, tokens: list[str], attention_plot: np.ndarray) -> Figure:
+    """One subplot per generated token, the 8x8 attention map resized and overlaid on
+    the real image -- matches the source notebook's `plot_attmap` (gist_heat colormap,
+    LANCZOS resize), fixing that function's broken subplot grid sizing
+    (`len_cap//2, len_cap//2` silently drops subplots for any odd token count).
+
+    Only meaningful for `greedy_caption`'s real per-step attention weights;
+    `beam_caption` only ever returns a zero-filled placeholder `attention_plot`, so
+    callers should not pass its result here."""
+    image = np.array(Image.open(image_path).convert("RGB"))
+    n = len(tokens)
+    ncols = math.ceil(math.sqrt(n)) if n else 1
+    nrows = math.ceil(n / ncols) if n else 1
+
+    fig = Figure(figsize=(3 * ncols, 3 * nrows))
+    for i, token in enumerate(tokens):
+        ax = fig.add_subplot(nrows, ncols, i + 1)
+        weights_img = np.reshape(attention_plot[i], (8, 8)).astype(np.float32)
+        weights_img = np.array(
+            Image.fromarray(weights_img, mode="F").resize((image.shape[1], image.shape[0]), Image.LANCZOS)
+        )
+        ax.imshow(image)
+        ax.imshow(weights_img, cmap="gist_heat", alpha=0.6)
+        ax.set_title(token, fontsize=10)
+        ax.axis("off")
+    fig.tight_layout()
+    return fig

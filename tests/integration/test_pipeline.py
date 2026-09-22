@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import tensorflow as tf
 from meerax.llm.base import LLMResponse
+from PIL import Image
 
 import src.app as app_module
 from src.services.eval_service import evaluate_captions
@@ -100,6 +101,12 @@ def test_run_caption_cli_end_to_end_against_a_real_checkpoint(tmp_path, monkeypa
     with open(checkpoint_dir / "tokenizer.pkl", "wb") as f:
         pickle.dump(_TinyTokenizer(), f)
 
+    # A real (if tiny/synthetic) image file: build_attention_figure() opens it for
+    # real (it isn't covered by the load_and_preprocess_image mock below, which only
+    # bypasses feature_service's real InceptionV3 preprocessing path).
+    image_path = tmp_path / "test_image.jpg"
+    Image.fromarray((np.random.rand(50, 50, 3) * 255).astype(np.uint8)).save(image_path)
+
     fake_extractor = MagicMock(return_value=tf.random.normal((1, 8, 8, 2048)))
     monkeypatch.setattr("src.app.build_feature_extractor", lambda: fake_extractor)
     monkeypatch.setattr(
@@ -111,7 +118,7 @@ def test_run_caption_cli_end_to_end_against_a_real_checkpoint(tmp_path, monkeypa
     output_path = tmp_path / "report.html"
     exit_code = app_module.main([
         "--mode", "caption",
-        "--image", "/fake/image.jpg",
+        "--image", str(image_path),
         "--checkpoint-dir", str(checkpoint_dir),
         "--top-k", str(vocab_size - 1),
         "--output", str(output_path),
@@ -123,6 +130,7 @@ def test_run_caption_cli_end_to_end_against_a_real_checkpoint(tmp_path, monkeypa
     assert "<audio controls" in html
     assert "Run Info" in html
     assert "epochs trained: 1" in html
+    assert "data:image/png;base64," in html, "greedy captioning must embed a real attention figure"
 
 
 def test_run_train_cli_produces_real_loss_every_epoch(tmp_path, monkeypatch, capsys):

@@ -1,10 +1,12 @@
 from unittest.mock import MagicMock
 
+import numpy as np
 import tensorflow as tf
+from PIL import Image
 
 from src.models.decoder import RNN_Decoder
 from src.models.encoder import CNN_Encoder
-from src.services.caption_service import beam_caption, greedy_caption
+from src.services.caption_service import beam_caption, build_attention_figure, greedy_caption
 
 
 class _FakeTokenizer:
@@ -137,3 +139,41 @@ def test_beam_caption_returns_result_for_normal_max_length(monkeypatch):
     )
     assert len(result.tokens) <= 5
     assert result.attention_plot.shape[1] == 64
+
+
+def test_build_attention_figure_one_subplot_per_token(tmp_path):
+    image_path = tmp_path / "test.jpg"
+    Image.fromarray((np.random.rand(100, 150, 3) * 255).astype(np.uint8)).save(image_path)
+
+    tokens = ["a", "dog", "runs", "<end>"]
+    attention_plot = np.random.rand(len(tokens), 64).astype(np.float32)
+
+    fig = build_attention_figure(str(image_path), tokens, attention_plot)
+    assert len(fig.axes) == len(tokens)
+
+
+def test_build_attention_figure_handles_odd_token_counts(tmp_path):
+    """Regression guard: the source notebook's plot_attmap used
+    fig.add_subplot(len_cap//2, len_cap//2, cap+1) for its grid, which silently drops
+    subplots (or raises) for any odd token count, since len_cap//2 * len_cap//2 < len_cap
+    whenever len_cap is odd (e.g. 5//2 * 5//2 = 4 < 5). This checks a real odd count."""
+    image_path = tmp_path / "test.jpg"
+    Image.fromarray((np.random.rand(100, 150, 3) * 255).astype(np.uint8)).save(image_path)
+
+    tokens = ["a", "small", "dog", "runs", "<end>"]
+    attention_plot = np.random.rand(len(tokens), 64).astype(np.float32)
+
+    fig = build_attention_figure(str(image_path), tokens, attention_plot)
+    assert len(fig.axes) == len(tokens)
+
+
+def test_build_attention_figure_produces_a_real_saveable_png(tmp_path):
+    image_path = tmp_path / "test.jpg"
+    Image.fromarray((np.random.rand(100, 150, 3) * 255).astype(np.uint8)).save(image_path)
+
+    fig = build_attention_figure(str(image_path), ["a", "dog"], np.random.rand(2, 64).astype(np.float32))
+
+    out_path = tmp_path / "attention.png"
+    fig.savefig(str(out_path))
+    assert out_path.exists()
+    assert out_path.stat().st_size > 1000
