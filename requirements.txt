@@ -1,4 +1,4 @@
-meerax[llm,nlp]==1.10.3
+meerax[llm,nlp]==1.10.4
 tensorflow==2.21.0
 keras==3.15.1
 gTTS==2.5.4
